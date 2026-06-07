@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CrowdWorks 案件ジャッジ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#13201f; --paper:#f4efe6; --card:#fffdf8; --line:#d9d0bf;
+    --accent:#0f6e63; --accent-soft:#cfe6e1; --coral:#e2543a; --amber:#caa23a; --mute:#6b6557;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:'Zen Kaku Gothic New',sans-serif;-webkit-text-size-adjust:100%}
+  .wrap{max-width:880px;margin:0 auto;padding:0 18px 90px}
+  header{border-bottom:2px solid var(--ink);padding:24px 18px 18px;max-width:880px;margin:0 auto}
+  .kicker{font-size:12px;letter-spacing:4px;color:var(--accent);font-weight:700}
+  h1{font-family:'Zen Maru Gothic',sans-serif;font-size:27px;margin:8px 0 4px;font-weight:700}
+  .sub{font-size:13px;color:var(--mute)}
+  .tabs{display:flex;gap:8px;margin:18px 0 8px}
+  .tab{flex:0 0 auto;padding:9px 18px;border:1px solid var(--line);background:var(--card);
+    border-radius:999px;font-weight:700;font-size:14px;cursor:pointer;color:var(--mute)}
+  .tab.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .sec{margin-bottom:20px}
+  .sec-head{display:flex;align-items:baseline;gap:10px}
+  .sec-n{font-family:'Zen Maru Gothic',sans-serif;color:var(--accent);font-weight:700;font-size:15px}
+  .sec-t{font-weight:700;font-size:16px}
+  .hint{font-size:12px;color:var(--mute);margin:4px 0 10px 26px;line-height:1.6}
+  .sec-body{margin-left:26px}
+  textarea,input[type=text]{
+    width:100%;padding:13px;font-size:13px;line-height:1.6;
+    font-family:'Zen Kaku Gothic New',sans-serif;color:var(--ink);
+    background:var(--card);border:1px solid var(--line);border-radius:11px;outline:none}
+  textarea{resize:vertical}
+  .ta-profile{min-height:120px}
+  .ta-job{min-height:150px}
+  .ta-prompt{min-height:130px;background:#fbf7ef;font-size:12px;color:#3a463f}
+  .ta-answer{min-height:110px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{background:var(--ink);color:var(--paper);border:none;border-radius:999px;
+    padding:12px 26px;font-size:15px;font-weight:700;font-family:'Zen Maru Gothic',sans-serif;
+    cursor:pointer;letter-spacing:1px;text-decoration:none;display:inline-block}
+  .btn:disabled{background:var(--mute);cursor:default}
+  .btn-sm{padding:9px 18px;font-size:13px}
+  .btn-ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+  .btn-accent{background:var(--accent)}
+  .btn-danger{background:var(--card);color:var(--coral);border:1px solid #eecabf}
+  .saved{font-size:12px;color:var(--accent);font-weight:700}
+  .err{margin-top:14px;color:var(--coral);font-size:14px;font-weight:500}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px;margin-bottom:16px;box-shadow:0 2px 0 rgba(19,32,31,.06)}
+  .step-tag{display:inline-block;background:var(--accent-soft);color:var(--accent);
+    font-weight:700;font-size:12px;letter-spacing:1px;padding:4px 12px;border-radius:999px;margin-bottom:10px}
+  .step h3{margin:0 0 6px;font-size:16px;font-family:'Zen Maru Gothic',sans-serif}
+  .step p{margin:0 0 12px;font-size:13px;color:var(--mute);line-height:1.7}
+  .copied{font-size:13px;color:var(--accent);font-weight:700}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 2px 0 rgba(19,32,31,.06)}
+  .grid{display:flex;gap:14px;flex-wrap:wrap}
+  .score-card{flex:1 1 200px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px}
+  .score-num{font-family:'Zen Maru Gothic',sans-serif;font-size:60px;font-weight:700;line-height:1}
+  .verdict-card{flex:2 1 300px;display:flex;flex-direction:column;justify-content:center;padding:20px}
+  .badge{display:inline-block;align-self:flex-start;font-weight:700;font-size:15px;padding:6px 14px;border-radius:999px;margin-bottom:10px}
+  .mini{flex:1 1 250px;padding:16px}
+  .mini-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .mini-lbl{font-size:12px;letter-spacing:1px;color:var(--mute);font-weight:700}
+  .mini-badge{font-weight:700;color:var(--accent);font-size:15px}
+  .list-card{flex:1 1 250px;padding:16px}
+  .list-t{font-size:12px;letter-spacing:1px;font-weight:700;margin-bottom:10px}
+  .list-card ul{margin:0;padding-left:16px}
+  .list-card li{font-size:13px;line-height:1.6;margin-bottom:6px}
+  .actions-card{padding:20px;background:var(--ink);border:none;margin-top:14px}
+  .actions-t{font-size:12px;letter-spacing:2px;color:var(--accent-soft);font-weight:700;margin-bottom:12px}
+  .actions-card ol{margin:0;padding-left:20px;color:var(--paper)}
+  .actions-card li{font-size:14px;line-height:1.7;margin-bottom:8px}
+  small.muted,.muted{font-size:12px;color:var(--mute)}
+  .hist-item{padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer}
+  .hist-item + .hist-item{border-top:1px solid var(--line)}
+  .hist-check{width:18px;height:18px;flex:0 0 auto}
+  .hist-score{font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:22px;width:42px;text-align:center;flex:0 0 auto}
+  .hist-main{flex:1 1 auto;min-width:0}
+  .hist-title{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist-meta{font-size:11.5px;color:var(--mute);margin-top:2px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .empty{padding:30px 16px;text-align:center;color:var(--mute);font-size:14px;line-height:1.8}
+  .cmp-wrap{overflow-x:auto;margin-top:6px}
+  table{border-collapse:collapse;width:100%;font-size:13px;background:var(--card)}
+  th,td{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
+  th{background:#efe8da;font-weight:700;font-size:12px;white-space:nowrap}
+  td.num{font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:18px;text-align:center}
+  .hide{display:none !important}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+  .modal-bg{position:fixed;inset:0;background:rgba(19,32,31,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto;z-index:50}
+  .modal{background:var(--paper);border-radius:16px;max-width:840px;width:100%;padding:22px}
+  .modal-x{float:right;cursor:pointer;font-size:22px;color:var(--mute);border:none;background:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">CROWDWORKS 案件ジャッジ</div>
+  <h1>応募すべき案件か、貼って判定。</h1>
+  <div class="sub">APIキー不要。お使いのClaudeにそのまま読ませる方式です。</div>
+</header>
+
+<div class="wrap">
+
+  <div class="tabs">
+    <button class="tab on" id="tab-judge">判定する</button>
+    <button class="tab" id="tab-hist">履歴・比較 <span id="hist-count" class="muted"></span></button>
+  </div>
+
+  <!-- ============ JUDGE VIEW ============ -->
+  <div id="view-judge">
+
+    <div class="sec">
+      <div class="sec-head"><span class="sec-n">01</span><span class="sec-t">あなたのプロフィール</span></div>
+      <div class="hint">CrowdWorksのプロフィールページを開いて全文コピー → 貼り付け → 保存（次回から自動で読み込まれます）</div>
+      <div class="sec-body">
+        <textarea id="profile" class="ta-profile" placeholder="自己紹介・スキル・経歴・実績・受注実績など、プロフィールページの内容をそのまま貼り付け"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-sm" id="save-profile">プロフィールを保存</button>
+          <span class="saved hide" id="profile-saved">保存しました ✓</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="sec-n">02</span><span class="sec-t">気になった案件</span></div>
+      <div class="hint">案件の詳細ページを開いて全文コピー → 貼り付け（1件ずつ）</div>
+      <div class="sec-body">
+        <textarea id="job" class="ta-job" placeholder="案件タイトル・報酬・募集内容・応募条件・クライアント情報などをそのまま貼り付け"></textarea>
+        <input type="text" id="joburl" style="margin-top:10px" placeholder="案件ページのURL（任意）— 結果・履歴から応募ページにすぐ飛べます">
+        <div class="hint" style="margin:6px 0 0 0">案件ごとにURLを入れておくと、判定後にワンタップで応募ページを開けます。</div>
+      </div>
+    </div>
+
+    <div style="margin-left:26px;margin-bottom:8px">
+      <button class="btn" id="build">判定用プロンプトを作成 ▶</button>
+      <div class="err hide" id="build-error"></div>
+    </div>
+
+    <!-- STEP 1: copy prompt -->
+    <div id="step-copy" class="step hide" style="margin-top:18px">
+      <span class="step-tag">STEP 1</span>
+      <span class="copied hide" id="prompt-updated" style="margin-left:8px">プロンプトを更新しました ✓</span>
+      <h3>このプロンプトをコピーして、Claudeに貼り付け</h3>
+      <p>下のテキストをコピー → Claude（claude.ai / アプリ）の新しいチャットに貼り付けて送信してください。判定結果がJSON形式で返ってきます。<br>※冒頭は毎回同じ指示文です。案件のテキストは下の方に入っています。</p>
+      <div id="prompt-jobline" class="muted" style="margin:0 0 8px;font-weight:700;color:var(--accent)"></div>
+      <textarea id="prompt-out" class="ta-prompt" readonly></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-sm btn-accent" id="copy-prompt">📋 プロンプトをコピー</button>
+        <a class="btn btn-sm btn-ghost" id="open-claude" href="https://claude.ai/new" target="_blank" rel="noopener">Claudeを開く ↗</a>
+        <span class="copied hide" id="copied-msg">コピーしました ✓</span>
+      </div>
+    </div>
+
+    <!-- STEP 2: paste answer -->
+    <div id="step-paste" class="step hide">
+      <span class="step-tag">STEP 2</span>
+      <h3>Claudeの回答を貼り戻す</h3>
+      <p>Claudeが返してきた回答を、まるごとコピーして下に貼り付けてください（前後に説明文が付いていてもOK・自動で読み取ります）。</p>
+      <textarea id="answer" class="ta-answer" placeholder="Claudeの回答（JSON）をここに貼り付け"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-sm" id="show-result">結果を表示・保存</button>
+        <span class="err hide" id="parse-error" style="margin:0"></span>
+      </div>
+    </div>
+
+    <div id="result" style="margin-top:24px"></div>
+  </div>
+
+  <!-- ============ HISTORY VIEW ============ -->
+  <div id="view-hist" class="hide">
+    <div class="toolbar">
+      <button class="btn btn-sm" id="compare-btn">選択した案件を比較</button>
+      <button class="btn btn-sm btn-ghost" id="select-all">全選択 / 解除</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-danger" id="clear-hist">履歴を全消去</button>
+    </div>
+    <div class="card" id="hist-list"></div>
+  </div>
+
+</div>
+
+<div class="modal-bg hide" id="modal-bg">
+  <div class="modal">
+    <button class="modal-x" id="modal-x">×</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+const LS = { profile:"cwjudge_profile", history:"cwjudge_history" };
+const $ = (id)=>document.getElementById(id);
+
+/* ---------- prompt template ---------- */
+const SYS = `あなたはCrowdWorksの案件選定を支援する専門アシスタントです。
+以下に渡す「受注者のCrowdWorksプロフィールページ全文」と「案件の詳細ページ全文」を読み、クライアント（発注者）がこのプロフィールを見て採用したいと思うか、という観点も含めて、この受注者がその案件に応募すべきかを判定してください。
+
+【重要・前処理】貼り付けられたテキストには、CrowdWorksのサイト共通部分（ヘッダー、グローバルメニュー、サイドメニュー、フッター、「国内シェア取引額No.1」等のキャッチコピー、アプリ案内、QRコード、ご意見箱、関連リンク集など）が大量に混ざっています。これらは判定にとってノイズなので完全に無視し、「プロフィール本文（自己紹介・スキル・経歴・実績・評価・単価など）」と「案件本文（タイトル・報酬・募集内容・応募条件・クライアント情報・応募状況など）」だけを抽出して読んでください。
+
+【出力】必ず次のJSONのみを返してください。前置き・解説・Markdownのコードフェンス（バッククォート）は一切付けず、JSONオブジェクトだけを出力すること。
+{
+  "title": "案件のタイトルを簡潔に（30字以内）",
+  "score": 0から100の整数(総合的な応募すべき度),
+  "verdict": "応募すべき" または "条件付きで応募" または "見送り推奨" のいずれか,
+  "fee": { "rating": "妥当" または "やや低い" または "低すぎ" または "不明", "comment": "報酬と想定工数の見合いについて1〜2文" },
+  "match": { "rating": 0から100の整数, "comment": "プロフィールと案件要件の一致度について1〜2文。クライアント視点で採用される可能性にも触れる" },
+  "concerns": ["気になる点・リスクを2〜4個。要件の曖昧さ、地雷の兆候、競合の多さなど。無ければ空配列"],
+  "edge": ["この受注者がアピールできる強み・刺さるポイントを1〜3個"],
+  "actions": ["勝率を上げるための前向きな改善アクションを2〜3個。『提案文ではこう書け』『プロフィールにこれを追記しろ』など、受注経験ゼロでも今すぐ手を動かせる具体策。見送り推奨でも、応募するなら何をすべきかを示す"],
+  "summary": "応募判断の結論を2〜3文で。プロフィール経験が浅い前提でも実用的に"
+}`;
+
+/* ---------- load / save ---------- */
+function loadSaved(){
+  const p = localStorage.getItem(LS.profile); if(p) $("profile").value = p;
+  refreshHistCount();
+}
+function getHistory(){ try{ return JSON.parse(localStorage.getItem(LS.history)||"[]"); }catch(e){ return []; } }
+function setHistory(h){ localStorage.setItem(LS.history, JSON.stringify(h)); refreshHistCount(); }
+function refreshHistCount(){ const n=getHistory().length; $("hist-count").textContent = n? "("+n+")":""; }
+
+/* ---------- helpers ---------- */
+function flash(elId){ const e=$(elId); e.classList.remove("hide"); setTimeout(()=>e.classList.add("hide"),1600); }
+function scoreColor(s){ return s>=75?"var(--accent)": s>=50?"var(--amber)":"var(--coral)"; }
+function verdictStyle(v){
+  if(!v) return {bg:"#eee",fg:"var(--ink)"};
+  if(v.includes("応募") && !v.includes("見送") && !v.includes("しない")) return {bg:"var(--accent-soft)",fg:"var(--accent)"};
+  if(v.includes("見送")||v.includes("しない")||v.includes("非推奨")) return {bg:"#f6d9d2",fg:"var(--coral)"};
+  return {bg:"#f3e8c8",fg:"#8a6d12"};
+}
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------- save profile ---------- */
+$("save-profile").onclick = ()=>{ localStorage.setItem(LS.profile,$("profile").value); flash("profile-saved"); };
+
+/* ---------- tabs ---------- */
+$("tab-judge").onclick = ()=>switchView("judge");
+$("tab-hist").onclick = ()=>{ switchView("hist"); renderHistory(); };
+function switchView(v){
+  $("view-judge").classList.toggle("hide", v!=="judge");
+  $("view-hist").classList.toggle("hide", v!=="hist");
+  $("tab-judge").classList.toggle("on", v==="judge");
+  $("tab-hist").classList.toggle("on", v==="hist");
+}
+
+/* ---------- STEP: build prompt ---------- */
+$("build").onclick = ()=>{
+  $("build-error").classList.add("hide");
+  const profile = $("profile").value.trim();
+  const job = $("job").value.trim();
+  if(!profile || !job){
+    const e=$("build-error"); e.textContent="プロフィールと案件、両方を貼り付けてください。"; e.classList.remove("hide");
+    return;
+  }
+  const full = SYS + "\n\n========================================\n\n"
+    + "# 受注者のCrowdWorksプロフィール（全文）\n" + profile
+    + "\n\n# 案件の詳細ページ（全文）\n" + job;
+  $("prompt-out").value = full;
+  $("prompt-out").scrollTop = 0;
+
+  // 「ちゃんと作り直された」ことが見えるように生成情報を表示
+  const now=new Date(); const p=n=>String(n).padStart(2,"0");
+  $("prompt-jobline").textContent =
+    "生成 " + p(now.getHours())+":"+p(now.getMinutes())+":"+p(now.getSeconds())
+    + "（この案件テキスト " + job.length.toLocaleString() + " 文字を反映）";
+  flash("prompt-updated");
+
+  // 新しい案件用に、前回の回答欄と結果をリセット（古い結果の誤保存を防ぐ）
+  $("answer").value = "";
+  $("parse-error").classList.add("hide");
+  $("result").innerHTML = "";
+
+  $("step-copy").classList.remove("hide");
+  $("step-paste").classList.remove("hide");
+  $("step-copy").scrollIntoView({behavior:"smooth", block:"start"});
+};
+
+/* ---------- copy prompt ---------- */
+$("copy-prompt").onclick = async ()=>{
+  const text = $("prompt-out").value;
+  try{
+    await navigator.clipboard.writeText(text);
+    flash("copied-msg");
+  }catch(e){
+    const ta=$("prompt-out"); ta.focus(); ta.select();
+    try{ document.execCommand("copy"); flash("copied-msg"); }
+    catch(_){ alert("コピーできませんでした。プロンプト欄を長押し/右クリックで全選択してコピーしてください。"); }
+  }
+};
+
+/* ---------- parse answer & show ---------- */
+function robustParse(raw){
+  let t = (raw||"").replace(/```json/gi,"").replace(/```/g,"").trim();
+  try{ return JSON.parse(t); }catch(e){}
+  const s = t.indexOf("{"); const e = t.lastIndexOf("}");
+  if(s>=0 && e>s){ return JSON.parse(t.slice(s, e+1)); }
+  throw new Error("JSONが見つかりません");
+}
+$("show-result").onclick = ()=>{
+  $("parse-error").classList.add("hide");
+  const raw = $("answer").value.trim();
+  if(!raw){ const e=$("parse-error"); e.textContent="Claudeの回答を貼り付けてください。"; e.classList.remove("hide"); return; }
+  let result;
+  try{ result = robustParse(raw); }
+  catch(err){
+    const e=$("parse-error");
+    e.textContent="回答を読み取れませんでした。Claudeの返答（{ から } まで）をそのまま貼り付けてください。";
+    e.classList.remove("hide");
+    return;
+  }
+  const item = saveToHistory(result);
+  currentLiveId = item.id;
+  renderResultInto($("result"), item);
+  $("result").scrollIntoView({behavior:"smooth", block:"start"});
+};
+
+/* ---------- url + applied helpers ---------- */
+let currentLiveId=null, currentModalId=null;
+function sanitizeUrl(u){
+  if(!u) return "";
+  u = String(u).trim();
+  if(/^https?:\/\//i.test(u)) return u;
+  if(/^[\w.-]+\.[a-z]{2,}/i.test(u)) return "https://"+u;
+  return "";
+}
+function metaOf(it){ return {id:it.id, url:it.url, applied:it.applied, appliedAt:it.appliedAt}; }
+function actionBarHTML(meta){
+  meta = meta || {};
+  const url = sanitizeUrl(meta.url);
+  const openBtn = url
+    ? `<a class="btn btn-sm btn-accent" href="${esc(url)}" target="_blank" rel="noopener">案件ページを開く / 応募する ↗</a>`
+    : `<span class="muted">案件URL未登録（02でURLを入れると応募ページに飛べます）</span>`;
+  let appliedBtn="", appliedInfo="";
+  if(meta.id){
+    appliedBtn = `<button class="btn btn-sm ${meta.applied?'btn-accent':'btn-ghost'}" onclick="toggleApplied('${meta.id}')">${meta.applied?'✓ 応募済み（解除）':'応募済みにする'}</button>`;
+    if(meta.applied && meta.appliedAt) appliedInfo = `<span class="muted">応募: ${fmtDate(meta.appliedAt)}</span>`;
+  }
+  return `<div class="card" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${openBtn}${appliedBtn}${appliedInfo}</div>`;
+}
+function toggleApplied(id){
+  const h=getHistory(); const it=h.find(x=>x.id===id); if(!it) return;
+  it.applied=!it.applied; it.appliedAt=it.applied?Date.now():null;
+  setHistory(h);
+  if(currentLiveId===id) renderResultInto($("result"), it);
+  if(currentModalId===id) $("modal-content").innerHTML = resultHTML(it.result, metaOf(it));
+  if(!$("view-hist").classList.contains("hide")) renderHistory();
+}
+function renderResultInto(el, it){ el.innerHTML = resultHTML(it.result, metaOf(it)); }
+
+/* ---------- render result ---------- */
+function resultHTML(r, meta){
+  const vs = verdictStyle(r.verdict);
+  const concerns = (r.concerns&&r.concerns.length)
+    ? "<ul>"+r.concerns.map(c=>"<li>"+esc(c)+"</li>").join("")+"</ul>"
+    : '<div class="muted" style="font-size:13px">特に大きな懸念は見当たりません。</div>';
+  const edge = (r.edge&&r.edge.length)
+    ? "<ul>"+r.edge.map(c=>"<li>"+esc(c)+"</li>").join("")+"</ul>"
+    : '<div class="muted" style="font-size:13px">—</div>';
+  const actions = (r.actions&&r.actions.length)
+    ? '<div class="card actions-card"><div class="actions-t">▶ 勝率を上げる次の一手</div><ol>'
+      + r.actions.map(a=>"<li>"+esc(a)+"</li>").join("") + "</ol></div>"
+    : "";
+  return actionBarHTML(meta) + `
+    <div class="grid">
+      <div class="card score-card">
+        <div class="mini-lbl">総合スコア</div>
+        <div class="score-num" style="color:${scoreColor(r.score)}">${esc(r.score)}</div>
+        <div class="muted">/ 100</div>
+      </div>
+      <div class="card verdict-card">
+        <span class="badge" style="background:${vs.bg};color:${vs.fg}">${esc(r.verdict)}</span>
+        <div style="font-size:14px;line-height:1.7">${esc(r.summary)}</div>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card mini">
+        <div class="mini-head"><span class="mini-lbl">単価 × 工数</span><span class="mini-badge">${esc(r.fee&&r.fee.rating)}</span></div>
+        <div style="font-size:13px;line-height:1.6">${esc(r.fee&&r.fee.comment)}</div>
+      </div>
+      <div class="card mini">
+        <div class="mini-head"><span class="mini-lbl">スキルマッチ</span><span class="mini-badge">${esc(r.match&&r.match.rating!=null?r.match.rating:"—")}%</span></div>
+        <div style="font-size:13px;line-height:1.6">${esc(r.match&&r.match.comment)}</div>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card list-card"><div class="list-t" style="color:var(--coral)">気になる点</div>${concerns}</div>
+      <div class="card list-card"><div class="list-t" style="color:var(--accent)">刺さるポイント</div>${edge}</div>
+    </div>
+    ${actions}`;
+}
+
+/* ---------- history ---------- */
+function saveToHistory(r){
+  const h = getHistory();
+  const item = {
+    id: Date.now()+"_"+Math.random().toString(36).slice(2,7),
+    ts: Date.now(),
+    title: r.title || "(無題の案件)",
+    score: (typeof r.score==="number"? r.score : parseInt(r.score)||0),
+    verdict: r.verdict || "—",
+    url: $("joburl").value.trim(),
+    applied: false,
+    appliedAt: null,
+    result: r
+  };
+  h.unshift(item);
+  setHistory(h.slice(0,100));
+  return item;
+}
+function fmtDate(ts){
+  const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"/"+p(d.getMonth()+1)+"/"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+function renderHistory(){
+  const h=getHistory(); const list=$("hist-list");
+  if(!h.length){ list.innerHTML = '<div class="empty">まだ判定履歴がありません。<br>案件を判定すると、ここに自動で記録されます。</div>'; return; }
+  list.innerHTML = h.map(item=>{
+    const vs=verdictStyle(item.verdict);
+    const applied=!!item.applied;
+    const url=sanitizeUrl(item.url);
+    const linkBtn = url
+      ? `<a class="btn btn-sm btn-ghost" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="案件ページを開く">↗</a>`
+      : "";
+    return `<div class="hist-item" data-id="${item.id}">
+      <input type="checkbox" class="hist-check" data-id="${item.id}" onclick="event.stopPropagation()">
+      <div class="hist-score" style="color:${scoreColor(item.score)}">${esc(item.score)}</div>
+      <div class="hist-main">
+        <div class="hist-title">${esc(item.title)}</div>
+        <div class="hist-meta">${fmtDate(item.ts)}${applied?' ・ <span style="color:var(--accent);font-weight:700">応募済み</span>':''}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(item.verdict)}</span>
+        ${linkBtn}
+        <button class="btn btn-sm ${applied?'btn-accent':'btn-ghost'}" onclick="event.stopPropagation();toggleApplied('${item.id}')" title="応募状況を切り替え">${applied?'済':'応募'}</button>
+      </div>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".hist-item").forEach(row=>{
+    row.onclick = ()=>{
+      const id=row.getAttribute("data-id");
+      const item=getHistory().find(x=>x.id===id);
+      if(item){ currentModalId=item.id; openModal(resultHTML(item.result, metaOf(item))); }
+    };
+  });
+}
+$("select-all").onclick = ()=>{
+  const boxes=[...document.querySelectorAll(".hist-check")];
+  const allOn = boxes.length>0 && boxes.every(b=>b.checked);
+  boxes.forEach(b=>b.checked=!allOn);
+};
+$("clear-hist").onclick = ()=>{
+  if(confirm("判定履歴をすべて削除します。よろしいですか？")){ setHistory([]); renderHistory(); }
+};
+
+/* ---------- compare ---------- */
+$("compare-btn").onclick = ()=>{
+  const ids=[...document.querySelectorAll(".hist-check:checked")].map(b=>b.getAttribute("data-id"));
+  if(ids.length<2){ alert("比較するには2件以上を選択してください。"); return; }
+  const h=getHistory();
+  const items=ids.map(id=>h.find(x=>x.id===id)).filter(Boolean).sort((a,b)=>b.score-a.score);
+  const rows=items.map((it,i)=>{
+    const r=it.result, vs=verdictStyle(it.verdict);
+    const topConcern=(r.concerns&&r.concerns[0])?r.concerns[0]:"—";
+    const url=sanitizeUrl(it.url);
+    const appliedCell = (it.applied?'<span style="color:var(--accent);font-weight:700">済</span>':'未')
+      + (url?` <a href="${esc(url)}" target="_blank" rel="noopener">↗</a>`:"");
+    return `<tr>
+      <td>${i+1}. ${esc(it.title)}</td>
+      <td class="num" style="color:${scoreColor(it.score)}">${esc(it.score)}</td>
+      <td><span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(it.verdict)}</span></td>
+      <td>${esc(r.fee&&r.fee.rating)}</td>
+      <td style="text-align:center;font-weight:700">${esc(r.match&&r.match.rating!=null?r.match.rating:"—")}%</td>
+      <td style="text-align:center;white-space:nowrap">${appliedCell}</td>
+      <td>${esc(topConcern)}</td>
+    </tr>`;
+  }).join("");
+  const html=`<h2 style="font-family:'Zen Maru Gothic',sans-serif;font-size:20px;margin:0 0 4px">案件の比較（スコア順）</h2>
+    <div class="muted" style="margin-bottom:14px">${items.length}件を並べています。上にあるほど応募優先度が高い案件です。</div>
+    <div class="cmp-wrap"><table>
+      <thead><tr><th>案件</th><th>スコア</th><th>判定</th><th>単価</th><th>マッチ</th><th>応募</th><th>主な懸念</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  currentModalId=null;
+  openModal(html);
+};
+
+/* ---------- modal ---------- */
+function openModal(html){ $("modal-content").innerHTML=html; $("modal-bg").classList.remove("hide"); }
+$("modal-x").onclick = ()=>{ $("modal-bg").classList.add("hide"); currentModalId=null; };
+$("modal-bg").onclick = (e)=>{ if(e.target===$("modal-bg")){ $("modal-bg").classList.add("hide"); currentModalId=null; } };
+
+/* ---------- init ---------- */
+loadSaved();
+</script>
+</body>
+</html>
