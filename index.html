@@ -36,6 +36,10 @@
   textarea{resize:vertical}
   .ta-profile{min-height:120px}
   .ta-job{min-height:150px}
+  .job-entry{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:#fcfaf4}
+  .job-entry-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .job-num{font-family:'Zen Maru Gothic',sans-serif;font-weight:700;color:var(--accent);font-size:14px}
+  .job-text{min-height:130px}
   .ta-prompt{min-height:130px;background:#fbf7ef;font-size:12px;color:#3a463f}
   .ta-answer{min-height:110px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -128,12 +132,11 @@
     </div>
 
     <div class="sec">
-      <div class="sec-head"><span class="sec-n">02</span><span class="sec-t">気になった案件</span></div>
-      <div class="hint">案件の詳細ページを開いて全文コピー → 貼り付け（1件ずつ）</div>
+      <div class="sec-head"><span class="sec-n">02</span><span class="sec-t">気になった案件（複数OK）</span></div>
+      <div class="hint">案件の詳細ページを全文コピー → 貼り付け。「＋案件を追加」で何件でもまとめて判定できます。URLを入れると応募ページにすぐ飛べます。</div>
       <div class="sec-body">
-        <textarea id="job" class="ta-job" placeholder="案件タイトル・報酬・募集内容・応募条件・クライアント情報などをそのまま貼り付け"></textarea>
-        <input type="text" id="joburl" style="margin-top:10px" placeholder="案件ページのURL（任意）— 結果・履歴から応募ページにすぐ飛べます">
-        <div class="hint" style="margin:6px 0 0 0">案件ごとにURLを入れておくと、判定後にワンタップで応募ページを開けます。</div>
+        <div id="jobs"></div>
+        <button class="btn btn-sm btn-ghost" id="add-job">＋ 案件を追加</button>
       </div>
     </div>
 
@@ -197,13 +200,13 @@ const LS = { profile:"cwjudge_profile", history:"cwjudge_history" };
 const $ = (id)=>document.getElementById(id);
 
 /* ---------- prompt template ---------- */
-const SYS = `あなたはCrowdWorksの案件選定を支援する専門アシスタントです。
-以下に渡す「受注者のCrowdWorksプロフィールページ全文」と「案件の詳細ページ全文」を読み、クライアント（発注者）がこのプロフィールを見て採用したいと思うか、という観点も含めて、この受注者がその案件に応募すべきかを判定してください。
+const ROLE = `あなたはCrowdWorksの案件選定を支援する専門アシスタントです。
+1人の受注者の「CrowdWorksプロフィールページ全文」と、複数の「案件の詳細ページ全文」を渡します。クライアント（発注者）がこのプロフィールを見て採用したいと思うか、という観点も含めて、各案件についてこの受注者が応募すべきかを判定してください。
 
-【重要・前処理】貼り付けられたテキストには、CrowdWorksのサイト共通部分（ヘッダー、グローバルメニュー、サイドメニュー、フッター、「国内シェア取引額No.1」等のキャッチコピー、アプリ案内、QRコード、ご意見箱、関連リンク集など）が大量に混ざっています。これらは判定にとってノイズなので完全に無視し、「プロフィール本文（自己紹介・スキル・経歴・実績・評価・単価など）」と「案件本文（タイトル・報酬・募集内容・応募条件・クライアント情報・応募状況など）」だけを抽出して読んでください。
+【重要・前処理】貼り付けられたテキストには、CrowdWorksのサイト共通部分（ヘッダー、グローバルメニュー、サイドメニュー、フッター、「国内シェア取引額No.1」等のキャッチコピー、アプリ案内、QRコード、ご意見箱、関連リンク集など）が大量に混ざっています。これらは判定にとってノイズなので完全に無視し、「プロフィール本文（自己紹介・スキル・経歴・実績・評価・単価など）」と「案件本文（タイトル・報酬・募集内容・応募条件・クライアント情報・応募状況など）」だけを抽出して読んでください。`;
 
-【出力】必ず次のJSONのみを返してください。前置き・解説・Markdownのコードフェンス（バッククォート）は一切付けず、JSONオブジェクトだけを出力すること。
-{
+const SCHEMA = `{
+  "jobIndex": この判定が対象とする案件の番号（入力で示した「案件N」のNと一致させる。1から始まる整数）,
   "title": "案件のタイトルを簡潔に（30字以内）",
   "score": 0から100の整数(総合的な応募すべき度),
   "verdict": "応募すべき" または "条件付きで応募" または "見送り推奨" のいずれか,
@@ -249,17 +252,31 @@ function switchView(v){
 }
 
 /* ---------- STEP: build prompt ---------- */
+let lastBuiltJobs = [];   // 生成時の案件スナップショット（URL対応づけ用）
+
 $("build").onclick = ()=>{
   $("build-error").classList.add("hide");
   const profile = $("profile").value.trim();
-  const job = $("job").value.trim();
-  if(!profile || !job){
-    const e=$("build-error"); e.textContent="プロフィールと案件、両方を貼り付けてください。"; e.classList.remove("hide");
+  const jobs = collectJobs();
+  if(!profile || jobs.length===0){
+    const e=$("build-error"); e.textContent="プロフィールと、案件を1件以上入力してください。"; e.classList.remove("hide");
     return;
   }
-  const full = SYS + "\n\n========================================\n\n"
+  lastBuiltJobs = jobs;
+  const N = jobs.length;
+
+  const outInstr = N===1
+    ? "【出力】必ず次の形式のJSONオブジェクト1個だけを、要素1個のJSON配列に入れて返してください。前置き・解説・コードフェンス（バッククォート）は一切付けないこと。"
+    : "【出力】以下の "+N+" 件の案件それぞれについて判定し、必ずJSON配列で返してください（要素数は "+N+" 個、案件の番号順）。配列の各要素は次の形式のオブジェクトです。前置き・解説・コードフェンス（バッククォート）は一切付けないこと。";
+
+  const jobsBlock = jobs.map((j,i)=>"\n----- 案件 "+(i+1)+" -----\n"+j.text).join("\n");
+
+  const full = ROLE + "\n\n" + outInstr + "\n"
+    + "[\n" + SCHEMA + "\n]\n"
+    + "\n========================================\n\n"
     + "# 受注者のCrowdWorksプロフィール（全文）\n" + profile
-    + "\n\n# 案件の詳細ページ（全文）\n" + job;
+    + "\n\n# 判定対象の案件（全 " + N + " 件）" + jobsBlock;
+
   $("prompt-out").value = full;
   $("prompt-out").scrollTop = 0;
 
@@ -267,13 +284,14 @@ $("build").onclick = ()=>{
   const now=new Date(); const p=n=>String(n).padStart(2,"0");
   $("prompt-jobline").textContent =
     "生成 " + p(now.getHours())+":"+p(now.getMinutes())+":"+p(now.getSeconds())
-    + "（この案件テキスト " + job.length.toLocaleString() + " 文字を反映）";
+    + "（" + N + "件の案件を反映 / 計" + full.length.toLocaleString() + "文字）";
   flash("prompt-updated");
 
-  // 新しい案件用に、前回の回答欄と結果をリセット（古い結果の誤保存を防ぐ）
+  // 新しい判定用に、前回の回答欄と結果をリセット（古い結果の誤保存を防ぐ）
   $("answer").value = "";
   $("parse-error").classList.add("hide");
   $("result").innerHTML = "";
+  currentLiveIds = [];
 
   $("step-copy").classList.remove("hide");
   $("step-paste").classList.remove("hide");
@@ -294,33 +312,48 @@ $("copy-prompt").onclick = async ()=>{
 };
 
 /* ---------- parse answer & show ---------- */
-function robustParse(raw){
+function extractJSON(raw){
   let t = (raw||"").replace(/```json/gi,"").replace(/```/g,"").trim();
   try{ return JSON.parse(t); }catch(e){}
-  const s = t.indexOf("{"); const e = t.lastIndexOf("}");
-  if(s>=0 && e>s){ return JSON.parse(t.slice(s, e+1)); }
+  // 配列を優先して抽出
+  const as=t.indexOf("["), ae=t.lastIndexOf("]");
+  if(as>=0 && ae>as){ try{ return JSON.parse(t.slice(as, ae+1)); }catch(e){} }
+  // 単一オブジェクト
+  const os=t.indexOf("{"), oe=t.lastIndexOf("}");
+  if(os>=0 && oe>os){ return JSON.parse(t.slice(os, oe+1)); }
   throw new Error("JSONが見つかりません");
 }
 $("show-result").onclick = ()=>{
   $("parse-error").classList.add("hide");
   const raw = $("answer").value.trim();
   if(!raw){ const e=$("parse-error"); e.textContent="Claudeの回答を貼り付けてください。"; e.classList.remove("hide"); return; }
-  let result;
-  try{ result = robustParse(raw); }
+  let parsed;
+  try{ parsed = extractJSON(raw); }
   catch(err){
     const e=$("parse-error");
-    e.textContent="回答を読み取れませんでした。Claudeの返答（{ から } まで）をそのまま貼り付けてください。";
+    e.textContent="回答を読み取れませんでした。Claudeの返答（[ から ] まで）をそのまま貼り付けてください。";
     e.classList.remove("hide");
     return;
   }
-  const item = saveToHistory(result);
-  currentLiveId = item.id;
-  renderResultInto($("result"), item);
+  const arr = Array.isArray(parsed) ? parsed : [parsed];
+  if(!arr.length){ const e=$("parse-error"); e.textContent="判定結果が空でした。"; e.classList.remove("hide"); return; }
+
+  const savedIds = [];
+  arr.forEach((r, i)=>{
+    // jobIndex があれば対応するURLを、なければ並び順でURLを割り当て
+    let ji = (typeof r.jobIndex==="number") ? r.jobIndex-1 : i;
+    if(ji<0 || ji>=lastBuiltJobs.length) ji = i;
+    const url = (lastBuiltJobs[ji] && lastBuiltJobs[ji].url) || (lastBuiltJobs[i] && lastBuiltJobs[i].url) || "";
+    const item = saveToHistory(r, url);
+    savedIds.push(item.id);
+  });
+  currentLiveIds = savedIds;
+  renderLiveStack();
   $("result").scrollIntoView({behavior:"smooth", block:"start"});
 };
 
 /* ---------- url + applied helpers ---------- */
-let currentLiveId=null, currentModalId=null;
+let currentLiveIds=[], currentModalId=null;
 function sanitizeUrl(u){
   if(!u) return "";
   u = String(u).trim();
@@ -346,11 +379,31 @@ function toggleApplied(id){
   const h=getHistory(); const it=h.find(x=>x.id===id); if(!it) return;
   it.applied=!it.applied; it.appliedAt=it.applied?Date.now():null;
   setHistory(h);
-  if(currentLiveId===id) renderResultInto($("result"), it);
+  if(currentLiveIds.includes(id)) renderLiveStack();
   if(currentModalId===id) $("modal-content").innerHTML = resultHTML(it.result, metaOf(it));
   if(!$("view-hist").classList.contains("hide")) renderHistory();
 }
-function renderResultInto(el, it){ el.innerHTML = resultHTML(it.result, metaOf(it)); }
+function renderLiveStack(){
+  const h=getHistory();
+  const items=currentLiveIds.map(id=>h.find(x=>x.id===id)).filter(Boolean);
+  const el=$("result");
+  if(!items.length){ el.innerHTML=""; return; }
+  const multi = items.length>1;
+  let head = "";
+  if(multi){
+    head = `<div class="card" style="padding:14px 16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px">${items.length}件を判定しました（スコア高い順に応募を検討）</div>
+      <div class="muted" style="margin-top:4px">各案件の詳細は下に並んでいます。全体の比較は「履歴・比較」タブからどうぞ。</div>
+    </div>`;
+  }
+  const body = items.map((it,i)=>{
+    const label = multi
+      ? `<div style="font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:18px;margin:${i?26:0}px 0 10px;padding-top:${i?20:0}px;border-top:${i?'2px solid var(--line)':'none'}">案件 ${i+1}：${esc(it.title)}</div>`
+      : "";
+    return label + resultHTML(it.result, metaOf(it));
+  }).join("");
+  el.innerHTML = head + body;
+}
 
 /* ---------- render result ---------- */
 function resultHTML(r, meta){
@@ -395,15 +448,15 @@ function resultHTML(r, meta){
 }
 
 /* ---------- history ---------- */
-function saveToHistory(r){
+function saveToHistory(r, url){
   const h = getHistory();
   const item = {
-    id: Date.now()+"_"+Math.random().toString(36).slice(2,7),
+    id: Date.now()+"_"+Math.random().toString(36).slice(2,9),
     ts: Date.now(),
     title: r.title || "(無題の案件)",
     score: (typeof r.score==="number"? r.score : parseInt(r.score)||0),
     verdict: r.verdict || "—",
-    url: $("joburl").value.trim(),
+    url: (url||"").trim(),
     applied: false,
     appliedAt: null,
     result: r
@@ -494,7 +547,36 @@ function openModal(html){ $("modal-content").innerHTML=html; $("modal-bg").class
 $("modal-x").onclick = ()=>{ $("modal-bg").classList.add("hide"); currentModalId=null; };
 $("modal-bg").onclick = (e)=>{ if(e.target===$("modal-bg")){ $("modal-bg").classList.add("hide"); currentModalId=null; } };
 
+/* ---------- multi job entries ---------- */
+function addJobEntry(text, url){
+  const wrap=document.createElement("div");
+  wrap.className="job-entry";
+  wrap.innerHTML =
+    '<div class="job-entry-head"><span class="job-num"></span>'
+    + '<button type="button" class="btn btn-sm btn-danger job-remove">削除</button></div>'
+    + '<textarea class="job-text" placeholder="案件タイトル・報酬・募集内容・応募条件・クライアント情報などをそのまま貼り付け"></textarea>'
+    + '<input type="text" class="job-url" style="margin-top:8px" placeholder="この案件のURL（任意）">';
+  wrap.querySelector(".job-text").value = text||"";
+  wrap.querySelector(".job-url").value = url||"";
+  wrap.querySelector(".job-remove").onclick = ()=>{ wrap.remove(); renumberJobs(); };
+  $("jobs").appendChild(wrap);
+  renumberJobs();
+}
+function renumberJobs(){
+  const entries=[...$("jobs").querySelectorAll(".job-entry")];
+  entries.forEach((el,i)=>{ el.querySelector(".job-num").textContent="案件 "+(i+1); });
+  entries.forEach(el=>{ el.querySelector(".job-remove").style.display = entries.length>1?"inline-block":"none"; });
+}
+function collectJobs(){
+  return [...$("jobs").querySelectorAll(".job-entry")].map(el=>({
+    text: el.querySelector(".job-text").value.trim(),
+    url:  el.querySelector(".job-url").value.trim()
+  })).filter(j=>j.text);
+}
+$("add-job").onclick = ()=>{ addJobEntry(); $("jobs").lastElementChild.querySelector(".job-text").focus(); };
+
 /* ---------- init ---------- */
+addJobEntry();   // 最初の1件
 loadSaved();
 </script>
 </body>
