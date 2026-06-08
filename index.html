@@ -219,7 +219,21 @@
       </div>
     </div>
 
-    <div id="s-result" style="margin-top:20px"></div>
+    <div id="s-toolbar" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="muted" style="font-weight:700">グループ:</span>
+      <button class="btn btn-sm btn-ghost" data-mode="found">見つけた日</button>
+      <button class="btn btn-sm btn-ghost" data-mode="posted">掲載日</button>
+      <button class="btn btn-sm btn-ghost" data-mode="deadline">締切</button>
+      <span style="width:1px;height:20px;background:var(--line);margin:0 2px"></span>
+      <span class="muted">スコア</span>
+      <input type="number" id="s-threshold" min="0" max="100" value="60" style="width:60px;padding:6px 8px;display:inline-block">
+      <button class="btn btn-sm" id="s-select-th">点以上を選択</button>
+      <button class="btn btn-sm btn-ghost" id="s-select-all">全選択/解除</button>
+      <button class="btn btn-sm btn-accent" id="s-copy-selected">📋 選択した案件名をコピー</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-danger" id="s-clear">保存データをクリア</button>
+    </div>
+    <div id="s-result" style="margin-top:8px"></div>
   </div>
 
   <!-- ============ HISTORY VIEW ============ -->
@@ -243,7 +257,7 @@
 </div>
 
 <script>
-const LS = { profile:"cwjudge_profile", history:"cwjudge_history", threshold:"cwjudge_threshold" };
+const LS = { profile:"cwjudge_profile", history:"cwjudge_history", threshold:"cwjudge_threshold", screen:"cwjudge_screen" };
 const $ = (id)=>document.getElementById(id);
 
 /* ---------- prompt template ---------- */
@@ -410,7 +424,40 @@ function sanitizeUrl(u){
   if(/^[\w.-]+\.[a-z]{2,}/i.test(u)) return "https://"+u;
   return "";
 }
-function metaOf(it){ return {id:it.id, url:it.url, applied:it.applied, appliedAt:it.appliedAt, score:it.score, hasJob:!!it.jobText}; }
+function metaOf(it){ return {id:it.id, url:it.url, status:getStatus(it), statusAt:it.statusAt, score:it.score, hasJob:!!it.jobText, title:it.title}; }
+
+/* ---------- status (応募ステータス) ---------- */
+const STATUSES = ["未定","検討中","応募済","返信あり","契約","見送り"];
+function statusColor(s){
+  return ({"未定":"#9a927f","検討中":"#caa23a","応募済":"#0f6e63","返信あり":"#2f6db0","契約":"#1f9d57","見送り":"#b06a5a"})[s] || "#9a927f";
+}
+function getStatus(it){ return it.status || (it.applied ? "応募済" : "未定"); }
+function statusSelectHTML(id, cur){
+  const opts = STATUSES.map(s=>`<option value="${s}" ${s===cur?'selected':''}>${s}</option>`).join("");
+  return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();setStatus('${id}', this.value)" style="padding:6px 10px;border-radius:999px;border:1px solid ${statusColor(cur)};background:var(--card);font-size:12px;font-weight:700;color:${statusColor(cur)}">${opts}</select>`;
+}
+function setStatus(id, val){
+  const h=getHistory(); const it=h.find(x=>x.id===id); if(!it) return;
+  it.status=val; it.statusAt=Date.now();
+  it.applied = (val==="応募済"||val==="返信あり"||val==="契約"); // 旧フィールドも一応同期
+  setHistory(h);
+  if(currentLiveIds.includes(id)) renderLiveStack();
+  if(currentModalId===id) $("modal-content").innerHTML = resultHTML(it.result, metaOf(it));
+  if(!$("view-hist").classList.contains("hide")) renderHistory();
+}
+
+/* ---------- copy text / 案件名コピー ---------- */
+function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); }
+function copyText(str, btn){
+  const t=String(str==null?"":str);
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).catch(()=>fallbackCopy(t)); }
+  else fallbackCopy(t);
+  if(btn){ const o=btn.textContent; btn.textContent="コピー✓"; setTimeout(()=>{btn.textContent=o;},1200); }
+}
+function copyNameBtn(title, label){
+  const enc=encodeURIComponent(title==null?"":title);
+  return `<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();copyText(decodeURIComponent('${enc}'), this)">${label||'📋 案件名'}</button>`;
+}
 function getThreshold(){
   const el=$("prop-threshold");
   const v = parseInt((el && el.value) || localStorage.getItem(LS.threshold) || "60");
@@ -422,23 +469,15 @@ function actionBarHTML(meta){
   const openBtn = url
     ? `<a class="btn btn-sm btn-accent" href="${esc(url)}" target="_blank" rel="noopener">案件ページを開く / 応募する ↗</a>`
     : `<span class="muted">案件URL未登録（02でURLを入れると応募ページに飛べます）</span>`;
-  let appliedBtn="", appliedInfo="", propBtn="";
+  let statusSel="", propBtn="", copyBtn="";
   if(meta.id){
-    appliedBtn = `<button class="btn btn-sm ${meta.applied?'btn-accent':'btn-ghost'}" onclick="toggleApplied('${meta.id}')">${meta.applied?'✓ 応募済み（解除）':'応募済みにする'}</button>`;
-    if(meta.applied && meta.appliedAt) appliedInfo = `<span class="muted">応募: ${fmtDate(meta.appliedAt)}</span>`;
+    copyBtn = copyNameBtn(meta.title, '📋 案件名コピー');
+    statusSel = `<span class="muted" style="font-weight:700">状況</span>` + statusSelectHTML(meta.id, meta.status||"未定");
     if(typeof meta.score==="number" && meta.score>=getThreshold()){
       propBtn = `<button class="btn btn-sm" style="background:var(--coral)" onclick="makeProposal('${meta.id}')">✍ 応募文を作成</button>`;
     }
   }
-  return `<div class="card" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${openBtn}${propBtn}${appliedBtn}${appliedInfo}</div>`;
-}
-function toggleApplied(id){
-  const h=getHistory(); const it=h.find(x=>x.id===id); if(!it) return;
-  it.applied=!it.applied; it.appliedAt=it.applied?Date.now():null;
-  setHistory(h);
-  if(currentLiveIds.includes(id)) renderLiveStack();
-  if(currentModalId===id) $("modal-content").innerHTML = resultHTML(it.result, metaOf(it));
-  if(!$("view-hist").classList.contains("hide")) renderHistory();
+  return `<div class="card" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">${openBtn}${copyBtn}${propBtn}${statusSel}</div>`;
 }
 function renderLiveStack(){
   const h=getHistory();
@@ -515,8 +554,8 @@ function saveToHistory(r, url, jobText){
     verdict: r.verdict || "—",
     url: (url||"").trim(),
     jobText: (jobText||""),
-    applied: false,
-    appliedAt: null,
+    status: "未定",
+    statusAt: null,
     result: r
   };
   h.unshift(item);
@@ -527,12 +566,16 @@ function fmtDate(ts){
   const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"/"+p(d.getMonth()+1)+"/"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
 }
+function fmtDay(ts){
+  const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"/"+p(d.getMonth()+1)+"/"+p(d.getDate());
+}
 function renderHistory(){
   const h=getHistory(); const list=$("hist-list");
   if(!h.length){ list.innerHTML = '<div class="empty">まだ判定履歴がありません。<br>案件を判定すると、ここに自動で記録されます。</div>'; return; }
   list.innerHTML = h.map(item=>{
     const vs=verdictStyle(item.verdict);
-    const applied=!!item.applied;
+    const st=getStatus(item);
     const url=sanitizeUrl(item.url);
     const linkBtn = url
       ? `<a class="btn btn-sm btn-ghost" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="案件ページを開く">↗</a>`
@@ -542,12 +585,13 @@ function renderHistory(){
       <div class="hist-score" style="color:${scoreColor(item.score)}">${esc(item.score)}</div>
       <div class="hist-main">
         <div class="hist-title">${esc(item.title)}</div>
-        <div class="hist-meta">${fmtDate(item.ts)}${applied?' ・ <span style="color:var(--accent);font-weight:700">応募済み</span>':''}</div>
+        <div class="hist-meta">${fmtDate(item.ts)} ・ <span style="color:${statusColor(st)};font-weight:700">${esc(st)}</span></div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(item.verdict)}</span>
+        ${copyNameBtn(item.title,'📋')}
         ${linkBtn}
-        <button class="btn btn-sm ${applied?'btn-accent':'btn-ghost'}" onclick="event.stopPropagation();toggleApplied('${item.id}')" title="応募状況を切り替え">${applied?'済':'応募'}</button>
+        ${statusSelectHTML(item.id, st)}
       </div>
     </div>`;
   }).join("");
@@ -578,7 +622,8 @@ $("compare-btn").onclick = ()=>{
     const r=it.result, vs=verdictStyle(it.verdict);
     const topConcern=(r.concerns&&r.concerns[0])?r.concerns[0]:"—";
     const url=sanitizeUrl(it.url);
-    const appliedCell = (it.applied?'<span style="color:var(--accent);font-weight:700">済</span>':'未')
+    const st=getStatus(it);
+    const statusCell = `<span style="color:${statusColor(st)};font-weight:700">${esc(st)}</span>`
       + (url?` <a href="${esc(url)}" target="_blank" rel="noopener">↗</a>`:"");
     return `<tr>
       <td>${i+1}. ${esc(it.title)}</td>
@@ -586,14 +631,14 @@ $("compare-btn").onclick = ()=>{
       <td><span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(it.verdict)}</span></td>
       <td>${esc(r.fee&&r.fee.rating)}</td>
       <td style="text-align:center;font-weight:700">${esc(r.match&&r.match.rating!=null?r.match.rating:"—")}%</td>
-      <td style="text-align:center;white-space:nowrap">${appliedCell}</td>
+      <td style="text-align:center;white-space:nowrap">${statusCell}</td>
       <td>${esc(topConcern)}</td>
     </tr>`;
   }).join("");
   const html=`<h2 style="font-family:'Zen Maru Gothic',sans-serif;font-size:20px;margin:0 0 4px">案件の比較（スコア順）</h2>
     <div class="muted" style="margin-bottom:14px">${items.length}件を並べています。上にあるほど応募優先度が高い案件です。</div>
     <div class="cmp-wrap"><table>
-      <thead><tr><th>案件</th><th>スコア</th><th>判定</th><th>単価</th><th>マッチ</th><th>応募</th><th>主な懸念</th></tr></thead>
+      <thead><tr><th>案件</th><th>スコア</th><th>判定</th><th>単価</th><th>マッチ</th><th>状況</th><th>主な懸念</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   currentModalId=null;
@@ -661,7 +706,9 @@ const SCREEN_PROMPT = `あなたはCrowdWorksの案件選定を支援する専�
     "title": "案件タイトルを、原文のまま一字一句変えずに正確に書き写す（短縮・要約・言い換えは禁止。CrowdWorks上で検索して見つけられるようにするため）",
     "reward": "報酬の表記（例: 5万〜10万 / 要相談 など）",
     "applicants": 応募者数(数値。不明ならnull),
-    "deadline": "締切の表記（例: あと10日 / 6月18日 など）",
+    "deadline": "締切の表記（例: あと10日 / 6月18日まで など、原文の表記）",
+    "postedDate": "掲載日を YYYY-MM-DD 形式で（例: 2026-06-08。年が無ければ2026年とみなす。不明ならnull）",
+    "deadlineDate": "応募締切の年月日を YYYY-MM-DD 形式で（括弧内の『○月○日まで』等から判断。年が無ければ2026年。『あと2時間』など当日なら当日の日付。不明ならnull）",
     "screenScore": 0から100の整数(開く価値の高さ),
     "openIt": true または false（詳細を開くべきか）,
     "reason": "そう判断した理由を一言（30字程度）"
@@ -693,35 +740,90 @@ $("s-show").onclick = ()=>{
   catch(err){ const e=$("s-parse-error"); e.textContent="回答を読み取れませんでした。Claudeの返答（[ から ] まで）をそのまま貼り付けてください。"; e.classList.remove("hide"); return; }
   const arr = Array.isArray(parsed) ? parsed : [parsed];
   if(!arr.length){ const e=$("s-parse-error"); e.textContent="結果が空でした。"; e.classList.remove("hide"); return; }
-  renderScreenTable(arr);
+  const added = upsertScreen(arr);
+  renderScreenView();
   $("s-result").scrollIntoView({behavior:"smooth", block:"start"});
 };
-function renderScreenTable(arr){
-  const items=[...arr].sort((a,b)=>((b.screenScore||0)-(a.screenScore||0)));
-  const rows=items.map((x,i)=>{
-    const sc=(typeof x.screenScore==="number")?x.screenScore:(parseInt(x.screenScore)||0);
-    const open = x.openIt ? '<span style="color:var(--accent);font-weight:700">開く</span>' : '<span class="muted">スキップ</span>';
-    return `<tr>
-      <td style="text-align:center;font-weight:700">${i+1}</td>
-      <td>${esc(x.title)}</td>
-      <td style="white-space:nowrap">${esc(x.reward)}</td>
-      <td style="text-align:center">${x.applicants==null?'—':esc(x.applicants)}</td>
-      <td style="white-space:nowrap">${esc(x.deadline)}</td>
-      <td class="num" style="color:${scoreColor(sc)}">${sc}</td>
-      <td style="text-align:center">${open}</td>
-      <td>${esc(x.reason)}</td>
-    </tr>`;
-  }).join("");
-  $("s-result").innerHTML = `
-    <div class="card" style="padding:14px 16px;margin-bottom:12px">
-      <div style="font-weight:700">${items.length}件をスクリーニングしました（スコア高い順）</div>
-      <div class="muted" style="margin-top:4px">「開く」と出た案件は、CrowdWorksで詳細ページを開き → 「判定する」タブで本格判定 → 高スコアなら応募文を作成、の流れがおすすめです。</div>
-    </div>
-    <div class="cmp-wrap"><table>
-      <thead><tr><th>順位</th><th>案件</th><th>報酬</th><th>応募者</th><th>締切</th><th>スコア</th><th>判断</th><th>理由</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
+
+/* ---------- screen store ---------- */
+function getScreen(){ try{ return JSON.parse(localStorage.getItem(LS.screen)||"[]"); }catch(e){ return []; } }
+function setScreen(s){ localStorage.setItem(LS.screen, JSON.stringify(s)); }
+function upsertScreen(items){
+  const store=getScreen();
+  const byTitle={}; store.forEach(x=>{ byTitle[x.title]=x; });
+  const now=Date.now(); let added=0;
+  items.forEach(r=>{
+    const title=(r.title!=null?String(r.title):"").trim() || "(無題)";
+    const rec={
+      title,
+      reward: r.reward!=null?String(r.reward):"",
+      applicants: (typeof r.applicants==="number")?r.applicants:(r.applicants==null?null:(parseInt(r.applicants)||null)),
+      deadline: r.deadline!=null?String(r.deadline):"",
+      postedDate: r.postedDate || null,
+      deadlineDate: r.deadlineDate || null,
+      screenScore: (typeof r.screenScore==="number")?r.screenScore:(parseInt(r.screenScore)||0),
+      openIt: !!r.openIt,
+      reason: r.reason!=null?String(r.reason):""
+    };
+    if(byTitle[title]){ Object.assign(byTitle[title], rec); }
+    else { rec.id="s_"+now+"_"+Math.random().toString(36).slice(2,8); rec.foundAt=now; store.push(rec); byTitle[title]=rec; added++; }
+  });
+  store.sort((a,b)=>(b.foundAt||0)-(a.foundAt||0));
+  setScreen(store.slice(0,500));
+  return added;
 }
+
+/* ---------- screen grouping & render ---------- */
+let screenGroupMode = "found";  // found | posted | deadline
+function groupScreen(store, mode){
+  const keyOf=(x)=>{
+    if(mode==="posted") return x.postedDate || "掲載日不明";
+    if(mode==="deadline") return x.deadlineDate || "締切不明";
+    return fmtDay(x.foundAt);
+  };
+  const map={};
+  store.forEach(x=>{ const k=keyOf(x); (map[k]=map[k]||[]).push(x); });
+  Object.keys(map).forEach(k=> map[k].sort((a,b)=>(b.screenScore||0)-(a.screenScore||0)));
+  let keys=Object.keys(map);
+  const unknown=keys.filter(k=>k.indexOf("不明")>=0);
+  let known=keys.filter(k=>k.indexOf("不明")<0);
+  if(mode==="deadline") known.sort((a,b)=> a<b?-1:(a>b?1:0));   // 締切が近い順
+  else known.sort((a,b)=> a<b?1:(a>b?-1:0));                    // 新しい順
+  return known.concat(unknown).map(k=>({label:k, items:map[k]}));
+}
+function renderScreenView(){
+  const store=getScreen();
+  const tb=$("s-toolbar");
+  if(!store.length){ if(tb) tb.classList.add("hide"); $("s-result").innerHTML=""; return; }
+  if(tb){
+    tb.classList.remove("hide");
+    [...tb.querySelectorAll("[data-mode]")].forEach(b=> b.classList.toggle("on", b.getAttribute("data-mode")===screenGroupMode));
+  }
+  const groups=groupScreen(store, screenGroupMode);
+  const modeLabel = screenGroupMode==="posted"?"掲載日":(screenGroupMode==="deadline"?"締切":"見つけた日");
+  let html=`<div class="muted" style="margin-bottom:10px">${store.length}件を保存中（同じ案件は重複しません）。チェック → 「選択した案件名をコピー」→ CrowdWorksで検索して詳細を開き、「判定する」タブで本格判定 → 高スコアなら応募文を作成、の流れです。グループ:「${modeLabel}」</div>`;
+  groups.forEach(g=>{
+    const rows=g.items.map(x=>{
+      const sc=x.screenScore||0;
+      const open=x.openIt?'<span style="color:var(--accent);font-weight:700">開く</span>':'<span class="muted">スキップ</span>';
+      return `<tr>
+        <td style="text-align:center"><input type="checkbox" class="s-check" data-id="${x.id}"></td>
+        <td>${esc(x.title)}</td>
+        <td style="white-space:nowrap">${esc(x.reward)}</td>
+        <td style="text-align:center">${x.applicants==null?'—':esc(x.applicants)}</td>
+        <td style="white-space:nowrap">${esc(x.deadline)}</td>
+        <td class="num" style="color:${scoreColor(sc)}">${sc}</td>
+        <td style="text-align:center">${open}</td>
+        <td>${esc(x.reason)}</td>
+        <td>${copyNameBtn(x.title,'📋')}</td>
+      </tr>`;
+    }).join("");
+    html += `<div style="font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:15px;margin:18px 0 8px;color:var(--accent)">${esc(g.label)} <span class="muted" style="font-weight:400">（${g.items.length}件）</span></div>`
+      + `<div class="cmp-wrap"><table><thead><tr><th></th><th>案件</th><th>報酬</th><th>応募者</th><th>締切</th><th>スコア</th><th>判断</th><th>理由</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  });
+  $("s-result").innerHTML = html;
+}
+function screenCheckedIds(){ return [...document.querySelectorAll(".s-check:checked")].map(b=>b.getAttribute("data-id")); }
 
 /* ============ PROPOSAL (application text) ============ */
 const PROPOSAL_ROLE = `あなたは受注者本人に代わって、CrowdWorksの「応募メッセージ（提案文）」を作成するプロのライターです。以下のプロフィール・案件・判定結果をふまえ、クライアントに「この人に頼みたい」と思わせる応募文を日本語で作成してください。
@@ -763,10 +865,40 @@ function makeProposal(id){
   );
 }
 
+/* ---------- screen toolbar wiring ---------- */
+[...document.querySelectorAll("#s-toolbar [data-mode]")].forEach(btn=>{
+  btn.onclick = ()=>{ screenGroupMode = btn.getAttribute("data-mode"); renderScreenView(); };
+});
+$("s-select-th").onclick = ()=>{
+  const th=parseInt($("s-threshold").value||"0")||0;
+  const store=getScreen();
+  document.querySelectorAll(".s-check").forEach(cb=>{
+    const it=store.find(x=>x.id===cb.getAttribute("data-id"));
+    cb.checked = !!(it && (it.screenScore||0)>=th);
+  });
+};
+$("s-select-all").onclick = ()=>{
+  const boxes=[...document.querySelectorAll(".s-check")];
+  const allOn = boxes.length>0 && boxes.every(b=>b.checked);
+  boxes.forEach(b=>b.checked=!allOn);
+};
+$("s-copy-selected").onclick = (e)=>{
+  const ids=screenCheckedIds();
+  if(!ids.length){ alert("案件にチェックを入れてください。"); return; }
+  const store=getScreen();
+  const titles=ids.map(id=>{ const it=store.find(x=>x.id===id); return it?it.title:null; }).filter(Boolean);
+  copyText(titles.join("\n"), e.target);
+  alert(titles.length+"件の案件名をコピーしました。CrowdWorksの検索に貼り付けて、1件ずつ詳細ページを開いてください。");
+};
+$("s-clear").onclick = ()=>{
+  if(confirm("一覧の保存データをすべて削除します。よろしいですか？（判定履歴は消えません）")){ setScreen([]); renderScreenView(); }
+};
+
 /* ---------- init ---------- */
 addJobEntry();   // 最初の1件
 (function(){ const th=localStorage.getItem(LS.threshold); if(th!==null && $("prop-threshold")) $("prop-threshold").value=th; })();
 loadSaved();
+renderScreenView();     // 保存済みの一覧を復元
 switchView("screen");   // 最初は「一覧から選ぶ」を表示
 </script>
 </body>
