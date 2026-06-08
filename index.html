@@ -23,6 +23,7 @@
   .tab{flex:0 0 auto;padding:9px 18px;border:1px solid var(--line);background:var(--card);
     border-radius:999px;font-weight:700;font-size:14px;cursor:pointer;color:var(--mute)}
   .tab.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .btn.on{background:var(--accent);color:var(--paper);border-color:var(--accent)}
   .sec{margin-bottom:20px}
   .sec-head{display:flex;align-items:baseline;gap:10px}
   .sec-n{font-family:'Zen Maru Gothic',sans-serif;color:var(--accent);font-weight:700;font-size:15px}
@@ -238,6 +239,26 @@
 
   <!-- ============ HISTORY VIEW ============ -->
   <div id="view-hist" class="hide">
+    <div class="toolbar">
+      <span class="muted" style="font-weight:700">表示:</span>
+      <select id="hist-filter" style="padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:700">
+        <option value="すべて">すべて</option>
+        <option value="未定">未定</option>
+        <option value="検討中">検討中</option>
+        <option value="応募済">応募済</option>
+        <option value="返信あり">返信あり</option>
+        <option value="契約">契約</option>
+        <option value="見送り">見送り</option>
+      </select>
+      <select id="hist-date" style="padding:7px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:700">
+        <option value="すべて">すべての日</option>
+      </select>
+      <button class="btn btn-sm btn-ghost on" id="hist-group">日ごとにまとめる</button>
+      <span style="width:1px;height:20px;background:var(--line);margin:0 2px"></span>
+      <span class="muted">スコア</span>
+      <input type="number" id="hist-threshold" min="0" max="100" value="60" style="width:60px;padding:6px 8px;display:inline-block">
+      <button class="btn btn-sm" id="hist-select-th">点以上を選択</button>
+    </div>
     <div class="toolbar">
       <button class="btn btn-sm" id="compare-btn">選択した案件を比較</button>
       <button class="btn btn-sm btn-ghost" id="select-all">全選択 / 解除</button>
@@ -570,31 +591,61 @@ function fmtDay(ts){
   const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
   return d.getFullYear()+"/"+p(d.getMonth()+1)+"/"+p(d.getDate());
 }
+let histFilter="すべて", histGroup=true, histDate="すべて";
+function histRowHTML(item){
+  const vs=verdictStyle(item.verdict);
+  const st=getStatus(item);
+  const url=sanitizeUrl(item.url);
+  const linkBtn = url
+    ? `<a class="btn btn-sm btn-ghost" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="案件ページを開く">↗</a>`
+    : "";
+  return `<div class="hist-item" data-id="${item.id}" data-day="${fmtDay(item.ts)}">
+    <input type="checkbox" class="hist-check" data-id="${item.id}" onclick="event.stopPropagation()">
+    <div class="hist-score" style="color:${scoreColor(item.score)}">${esc(item.score)}</div>
+    <div class="hist-main">
+      <div class="hist-title">${esc(item.title)}</div>
+      <div class="hist-meta">${fmtDate(item.ts)} ・ <span style="color:${statusColor(st)};font-weight:700">${esc(st)}</span></div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(item.verdict)}</span>
+      ${copyNameBtn(item.title,'📋')}
+      ${linkBtn}
+      ${statusSelectHTML(item.id, st)}
+    </div>
+  </div>`;
+}
+function refreshDateFilter(){
+  const sel=$("hist-date"); if(!sel) return;
+  const all=getHistory();
+  const days=[...new Set(all.map(x=>fmtDay(x.ts)))].sort((a,b)=> a<b?1:(a>b?-1:0));
+  if(histDate!=="すべて" && days.indexOf(histDate)<0) histDate="すべて";
+  sel.innerHTML = '<option value="すべて">すべての日</option>' + days.map(d=>`<option value="${d}">${d}</option>`).join("");
+  sel.value = histDate;
+}
 function renderHistory(){
-  const h=getHistory(); const list=$("hist-list");
-  if(!h.length){ list.innerHTML = '<div class="empty">まだ判定履歴がありません。<br>案件を判定すると、ここに自動で記録されます。</div>'; return; }
-  list.innerHTML = h.map(item=>{
-    const vs=verdictStyle(item.verdict);
-    const st=getStatus(item);
-    const url=sanitizeUrl(item.url);
-    const linkBtn = url
-      ? `<a class="btn btn-sm btn-ghost" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="案件ページを開く">↗</a>`
-      : "";
-    return `<div class="hist-item" data-id="${item.id}">
-      <input type="checkbox" class="hist-check" data-id="${item.id}" onclick="event.stopPropagation()">
-      <div class="hist-score" style="color:${scoreColor(item.score)}">${esc(item.score)}</div>
-      <div class="hist-main">
-        <div class="hist-title">${esc(item.title)}</div>
-        <div class="hist-meta">${fmtDate(item.ts)} ・ <span style="color:${statusColor(st)};font-weight:700">${esc(st)}</span></div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span class="pill" style="background:${vs.bg};color:${vs.fg}">${esc(item.verdict)}</span>
-        ${copyNameBtn(item.title,'📋')}
-        ${linkBtn}
-        ${statusSelectHTML(item.id, st)}
-      </div>
-    </div>`;
-  }).join("");
+  const all=getHistory(); const list=$("hist-list");
+  refreshDateFilter();
+  if(!all.length){ list.innerHTML = '<div class="empty">まだ判定履歴がありません。<br>案件を判定すると、ここに自動で記録されます。</div>'; return; }
+  let items = all;
+  if(histFilter!=="すべて") items = items.filter(x=>getStatus(x)===histFilter);
+  if(histDate!=="すべて") items = items.filter(x=>fmtDay(x.ts)===histDate);
+  if(!items.length){ list.innerHTML = '<div class="empty">条件に合う案件はありません。</div>'; return; }
+  if(histGroup){
+    const map={};
+    items.forEach(x=>{ const k=fmtDay(x.ts); (map[k]=map[k]||[]).push(x); });
+    Object.keys(map).forEach(k=> map[k].sort((a,b)=>(b.score||0)-(a.score||0)));
+    const days=Object.keys(map).sort((a,b)=> a<b?1:(a>b?-1:0));  // 新しい日が上
+    list.innerHTML = days.map(d=>{
+      const rows=map[d].map(histRowHTML).join("");
+      const enc=encodeURIComponent(d);
+      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px 4px">
+        <span style="font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:14px;color:var(--accent)">${esc(d)} <span class="muted" style="font-weight:400">（${map[d].length}件）</span></span>
+        <button class="btn btn-sm btn-ghost" onclick="selectDay(decodeURIComponent('${enc}'))">この日を選択 / 解除</button>
+      </div>${rows}`;
+    }).join("");
+  } else {
+    list.innerHTML = items.map(histRowHTML).join("");
+  }
   list.querySelectorAll(".hist-item").forEach(row=>{
     row.onclick = ()=>{
       const id=row.getAttribute("data-id");
@@ -611,6 +662,23 @@ $("select-all").onclick = ()=>{
 $("clear-hist").onclick = ()=>{
   if(confirm("判定履歴をすべて削除します。よろしいですか？")){ setHistory([]); renderHistory(); }
 };
+$("hist-filter").onchange = ()=>{ histFilter=$("hist-filter").value; renderHistory(); };
+$("hist-date").onchange = ()=>{ histDate=$("hist-date").value; renderHistory(); };
+$("hist-group").onclick = ()=>{ histGroup=!histGroup; $("hist-group").classList.toggle("on", histGroup); renderHistory(); };
+$("hist-select-th").onclick = ()=>{
+  const th=parseInt($("hist-threshold").value||"0")||0;
+  const all=getHistory();
+  document.querySelectorAll(".hist-check").forEach(cb=>{
+    const it=all.find(x=>x.id===cb.getAttribute("data-id"));
+    cb.checked = !!(it && (it.score||0)>=th);
+  });
+};
+function selectDay(day){
+  const rows=[...document.querySelectorAll('.hist-item')].filter(r=>r.getAttribute('data-day')===day);
+  const boxes=rows.map(r=>r.querySelector('.hist-check')).filter(Boolean);
+  const allOn = boxes.length>0 && boxes.every(b=>b.checked);
+  boxes.forEach(b=>b.checked=!allOn);
+}
 
 /* ---------- compare ---------- */
 $("compare-btn").onclick = ()=>{
