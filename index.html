@@ -230,7 +230,8 @@
       <input type="number" id="s-threshold" min="0" max="100" value="60" style="width:60px;padding:6px 8px;display:inline-block">
       <button class="btn btn-sm" id="s-select-th">点以上を選択</button>
       <button class="btn btn-sm btn-ghost" id="s-select-all">全選択/解除</button>
-      <button class="btn btn-sm btn-accent" id="s-copy-selected">📋 選択した案件名をコピー</button>
+      <button class="btn btn-sm btn-accent" id="s-search-selected">🔍 選択を検索</button>
+      <button class="btn btn-sm btn-ghost" id="s-copy-selected">📋 選択した案件名をコピー</button>
       <span style="flex:1"></span>
       <button class="btn btn-sm btn-danger" id="s-clear">保存データをクリア</button>
     </div>
@@ -478,6 +479,29 @@ function copyText(str, btn){
 function copyNameBtn(title, label){
   const enc=encodeURIComponent(title==null?"":title);
   return `<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();copyText(decodeURIComponent('${enc}'), this)">${label||'📋 案件名'}</button>`;
+}
+/* ---------- CrowdWorks 検索リンク ---------- */
+// CrowdWorksのキーワード検索URL。万一パラメータ名が違っていたら、この1行だけ直せばOK。
+const CW_SEARCH_URL = "https://crowdworks.jp/public/jobs/search?search%5Bkeywords%5D=";
+// 案件名を検索向きに整える：括弧と中身を削除→ / 等で分割→日本語を重く見て本体フレーズだけ採用
+function cleanForSearch(title){
+  let t = String(title==null?"":title);
+  // 1) 括弧と中身を丸ごと削除（【】〔〕[]（）{}〈〉《》）。「」『』は本題を含みがちなので残す
+  t = t.replace(/[【〔\[［(（｛{〈《][^【〔\[［(（｛{〈《】〕\]］)）｝}〉》]*[】〕\]］)）｝}〉》]/g, " ");
+  // 2) / ／ \ | ｜ で分割
+  const parts = t.split(/[\/／\\|｜]+/).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
+  // 3) 日本語（漢字・かな・カナ）を重く見て、本体フレーズの塊を選ぶ
+  const weight = s => { let w=0; for(const c of s){ w += /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(c)?2:1; } return w; };
+  let main = parts.slice().sort((a,b)=> weight(b)-weight(a))[0] || "";
+  // 4) 残った装飾記号を空白化して整理（ー＝長音は残す）
+  main = main.replace(/[※★☆◆◇■□●○〜~＊*]/g," ").replace(/\s+/g," ").trim();
+  return main || t.replace(/\s+/g," ").trim() || String(title==null?"":title).trim();
+}
+function cwSearchUrl(title){ const t=cleanForSearch(title); return t ? CW_SEARCH_URL + encodeURIComponent(t) : ""; }
+function openCwSearch(title){ const u=cwSearchUrl(title); if(u) window.open(u,"_blank","noopener"); }
+function searchNameBtn(title, label){
+  const enc=encodeURIComponent(title==null?"":title);
+  return `<button class="btn btn-sm btn-accent" onclick="event.stopPropagation();openCwSearch(decodeURIComponent('${enc}'))">${label||'🔍 検索'}</button>`;
 }
 function getThreshold(){
   const el=$("prop-threshold");
@@ -883,7 +907,7 @@ function renderScreenView(){
         <td class="num" style="color:${scoreColor(sc)}">${sc}</td>
         <td style="text-align:center">${open}</td>
         <td>${esc(x.reason)}</td>
-        <td>${copyNameBtn(x.title,'📋')}</td>
+        <td style="white-space:nowrap">${searchNameBtn(x.title)} ${copyNameBtn(x.title,'📋')}</td>
       </tr>`;
     }).join("");
     html += `<div style="font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:15px;margin:18px 0 8px;color:var(--accent)">${esc(g.label)} <span class="muted" style="font-weight:400">（${g.items.length}件）</span></div>`
@@ -957,6 +981,15 @@ $("s-copy-selected").onclick = (e)=>{
   const titles=ids.map(id=>{ const it=store.find(x=>x.id===id); return it?it.title:null; }).filter(Boolean);
   copyText(titles.join("\n"), e.target);
   alert(titles.length+"件の案件名をコピーしました。CrowdWorksの検索に貼り付けて、1件ずつ詳細ページを開いてください。");
+};
+$("s-search-selected").onclick = ()=>{
+  const ids=screenCheckedIds();
+  if(!ids.length){ alert("案件にチェックを入れてください。"); return; }
+  const store=getScreen();
+  const titles=ids.map(id=>{ const it=store.find(x=>x.id===id); return it?it.title:null; }).filter(Boolean);
+  if(!titles.length) return;
+  if(titles.length>8 && !confirm(titles.length+"件ぶんの検索タブを一度に開きます。よろしいですか？")) return;
+  titles.forEach(t=>openCwSearch(t));
 };
 $("s-clear").onclick = ()=>{
   if(confirm("一覧の保存データをすべて削除します。よろしいですか？（判定履歴は消えません）")){ setScreen([]); renderScreenView(); }
