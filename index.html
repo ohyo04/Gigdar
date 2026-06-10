@@ -113,6 +113,8 @@
   .screen-tbl td.c-actions{margin-top:10px}
   .screen-tbl td.c-actions::before{content:"";margin:0;min-width:0}
   .screen-tbl td[data-label="理由"]::before{display:block;min-width:0;margin-bottom:2px}
+  .screen-tbl tr:has(.s-check:checked){border-color:var(--accent);background:var(--accent-soft)}
+  .screen-tbl td.c-check input{width:18px;height:18px;cursor:pointer;accent-color:var(--accent)}
   .hide{display:none !important}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
   .modal-bg{position:fixed;inset:0;background:rgba(19,32,31,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto;z-index:50}
@@ -135,6 +137,25 @@
     <button class="tab" id="tab-judge">判定する</button>
     <button class="tab" id="tab-hist">履歴・比較 <span id="hist-count" class="muted"></span></button>
   </div>
+
+  <!-- ============ データのバックアップ / 復元 ============ -->
+  <details class="backup-box" style="border:1px solid var(--line);border-radius:12px;background:var(--card);margin:6px 0 14px;padding:0 14px">
+    <summary style="cursor:pointer;padding:12px 0;font-family:'Zen Maru Gothic',sans-serif;font-weight:700;color:var(--accent);font-size:14px">💾 データのバックアップ / 復元</summary>
+    <div style="padding:0 0 14px">
+      <p class="muted" style="margin:0 0 10px">データはこのブラウザ（このURL）だけに保存されます。書き出してファイルに保存しておくと、ドメイン変更や端末の引っ越し時に復元できます。</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-accent" id="bk-export">💾 バックアップを書き出し</button>
+        <button class="btn btn-sm btn-ghost" id="bk-import-file">📂 ファイルから復元</button>
+        <input type="file" id="bk-file" accept="application/json,.json" style="display:none">
+      </div>
+      <div style="margin-top:10px">
+        <div class="muted" style="font-weight:700;margin-bottom:4px">または JSON を貼り付けて復元（別ドメインからの引っ越し用）</div>
+        <textarea id="bk-paste" placeholder='例: {"cwjudge_screen":"...","cwjudge_history":"..."}' style="width:100%;min-height:70px;font-size:12px;font-family:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card);box-sizing:border-box"></textarea>
+        <div style="margin-top:6px"><button class="btn btn-sm" id="bk-import-paste">貼り付け内容から復元</button></div>
+      </div>
+      <div class="muted" id="bk-msg" style="margin-top:8px;font-weight:700"></div>
+    </div>
+  </details>
 
   <!-- ============ JUDGE VIEW ============ -->
   <div id="view-judge">
@@ -932,8 +953,14 @@ function renderScreenView(){
       + `<div class="cmp-wrap"><table class="screen-tbl"><thead><tr><th></th><th>案件</th><th>報酬</th><th>応募者</th><th>締切</th><th>スコア</th><th>判断</th><th>理由</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   });
   $("s-result").innerHTML = html;
+  updateSelCount();
 }
 function screenCheckedIds(){ return [...document.querySelectorAll(".s-check:checked")].map(b=>b.getAttribute("data-id")); }
+function updateSelCount(){
+  const n=document.querySelectorAll(".s-check:checked").length;
+  const b=$("s-search-selected"); if(b) b.textContent = n ? ("🔍 選択を検索 ("+n+"件)") : "🔍 選択を検索";
+  const c=$("s-copy-selected"); if(c) c.textContent = n ? ("📋 選択した案件名をコピー ("+n+"件)") : "📋 選択した案件名をコピー";
+}
 
 /* ============ PROPOSAL (application text) ============ */
 const PROPOSAL_ROLE = `あなたは受注者本人に代わって、CrowdWorksの「応募メッセージ（提案文）」を作成するプロのライターです。以下のプロフィール・案件・判定結果をふまえ、クライアントに「この人に頼みたい」と思わせる応募文を日本語で作成してください。
@@ -986,12 +1013,15 @@ $("s-select-th").onclick = ()=>{
     const it=store.find(x=>x.id===cb.getAttribute("data-id"));
     cb.checked = !!(it && (it.screenScore||0)>=th);
   });
+  updateSelCount();
 };
 $("s-select-all").onclick = ()=>{
   const boxes=[...document.querySelectorAll(".s-check")];
   const allOn = boxes.length>0 && boxes.every(b=>b.checked);
   boxes.forEach(b=>b.checked=!allOn);
+  updateSelCount();
 };
+$("s-result").addEventListener("change", e=>{ if(e.target && e.target.classList && e.target.classList.contains("s-check")) updateSelCount(); });
 $("s-copy-selected").onclick = (e)=>{
   const ids=screenCheckedIds();
   if(!ids.length){ alert("案件にチェックを入れてください。"); return; }
@@ -1011,6 +1041,52 @@ $("s-search-selected").onclick = ()=>{
 };
 $("s-clear").onclick = ()=>{
   if(confirm("一覧の保存データをすべて削除します。よろしいですか？（判定履歴は消えません）")){ setScreen([]); renderScreenView(); }
+};
+
+/* ---------- バックアップ（書き出し / 復元） ---------- */
+function bkSetMsg(t, ok){ const e=$("bk-msg"); if(e){ e.textContent=t||""; e.style.color = (ok===false) ? "var(--coral)" : "var(--accent)"; } }
+function exportBackup(){
+  const data={ _app:"Gigdar", _exportedAt:new Date().toISOString() };
+  [LS.profile, LS.history, LS.threshold, LS.screen].forEach(k=>{ data[k]=localStorage.getItem(k); });
+  const blob=new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const d=new Date();
+  const ymd=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const a=document.createElement("a");
+  a.href=url; a.download="gigdar-backup-"+ymd+".json"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+  bkSetMsg("書き出しました。ファイルを安全な場所に保存してください。", true);
+}
+function applyBackup(obj){
+  const keys=[LS.profile, LS.history, LS.threshold, LS.screen];
+  const present=keys.filter(k=> typeof obj[k]==="string");
+  if(!present.length){ bkSetMsg("これはGigdarのバックアップではないようです（cwjudge_* が見つかりません）。", false); return; }
+  if(!confirm("このサイトの現在のデータを、読み込んだ内容で置き換えます。よろしいですか？")) return;
+  present.forEach(k=> localStorage.setItem(k, obj[k]));
+  alert("復元しました。ページを再読み込みします。");
+  location.reload();
+}
+function importFromText(text){
+  let obj;
+  try{ obj=JSON.parse(text); }
+  catch(e){ bkSetMsg("JSONとして読み取れませんでした。内容を確認してください。", false); return; }
+  if(!obj || typeof obj!=="object"){ bkSetMsg("正しいバックアップ形式ではありません。", false); return; }
+  applyBackup(obj);
+}
+$("bk-export").onclick = exportBackup;
+$("bk-import-file").onclick = ()=> $("bk-file").click();
+$("bk-file").onchange = (e)=>{
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload = ()=> importFromText(String(r.result||""));
+  r.onerror = ()=> bkSetMsg("ファイルを読めませんでした。", false);
+  r.readAsText(f);
+  e.target.value="";
+};
+$("bk-import-paste").onclick = ()=>{
+  const t=($("bk-paste").value||"").trim();
+  if(!t){ bkSetMsg("JSONを貼り付けてください。", false); return; }
+  importFromText(t);
 };
 
 /* ---------- init ---------- */
