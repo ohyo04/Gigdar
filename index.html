@@ -537,7 +537,7 @@ function cleanForSearch(title){
   return main || t.replace(/\s+/g," ").trim() || String(title==null?"":title).trim();
 }
 function cwSearchUrl(title){ const t=cleanForSearch(title); return t ? CW_SEARCH_URL + encodeURIComponent(t) : ""; }
-function openCwSearch(title){ const u=cwSearchUrl(title); if(u) window.open(u,"_blank","noopener"); }
+function openCwSearch(title){ const u=cwSearchUrl(title); if(!u) return null; const w=window.open(u,"_blank"); if(w){ try{ w.opener=null; }catch(e){} } return w; }
 function searchNameBtn(title, label){
   const enc=encodeURIComponent(title==null?"":title);
   return `<button class="btn btn-sm btn-accent" onclick="event.stopPropagation();openCwSearch(decodeURIComponent('${enc}'))">${label||'🔍 検索'}</button>`;
@@ -1036,8 +1036,12 @@ $("s-search-selected").onclick = ()=>{
   const store=getScreen();
   const titles=ids.map(id=>{ const it=store.find(x=>x.id===id); return it?it.title:null; }).filter(Boolean);
   if(!titles.length) return;
-  if(titles.length>8 && !confirm(titles.length+"件ぶんの検索タブを一度に開きます。よろしいですか？")) return;
-  titles.forEach(t=>openCwSearch(t));
+  if(titles.length>8 && !confirm(titles.length+"件ぶんのタブを一度に開きます。よろしいですか？")) return;
+  let blocked=0;
+  titles.forEach(t=>{ if(!openCwSearch(t)) blocked++; });
+  if(blocked>0){
+    alert(blocked+"件のタブがブラウザのポップアップブロックで開けませんでした。\nアドレスバー右の「ポップアップがブロックされました」アイコンを開いて、このサイトのポップアップを「常に許可」にし、もう一度「選択を検索」を押してください。");
+  }
 };
 $("s-clear").onclick = ()=>{
   if(confirm("一覧の保存データをすべて削除します。よろしいですか？（判定履歴は消えません）")){ setScreen([]); renderScreenView(); }
