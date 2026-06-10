@@ -95,6 +95,24 @@
   th,td{border:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}
   th{background:#efe8da;font-weight:700;font-size:12px;white-space:nowrap}
   td.num{font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:18px;text-align:center}
+  /* 一覧（スクリーニング）はカード表示。広い画面は複数列・狭い画面は1列に自動。比較表など他のテーブルには影響しない */
+  .screen-tbl, .screen-tbl tr, .screen-tbl td{display:block}
+  .screen-tbl thead{display:none}
+  .screen-tbl{border:0;background:transparent}
+  .screen-tbl tbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:10px}
+  .screen-tbl tr{position:relative;border:1px solid var(--line);border-radius:12px;
+    background:var(--card);padding:12px 14px 14px;margin:0}
+  .screen-tbl td{border:0;padding:2px 0;text-align:left !important;white-space:normal !important;word-break:break-word}
+  .screen-tbl td::before{content:attr(data-label);display:inline-block;min-width:58px;
+    color:var(--mute);font-weight:700;font-size:11px;margin-right:8px;vertical-align:top}
+  .screen-tbl td.c-title{font-size:15px;font-weight:700;line-height:1.5;padding-right:34px;margin-bottom:5px}
+  .screen-tbl td.c-title::before{content:"";margin:0;min-width:0}
+  .screen-tbl td.c-check{position:absolute;top:12px;right:12px;padding:0}
+  .screen-tbl td.c-check::before{content:"";margin:0;min-width:0}
+  .screen-tbl td.num{font-size:20px;padding:4px 0}
+  .screen-tbl td.c-actions{margin-top:10px}
+  .screen-tbl td.c-actions::before{content:"";margin:0;min-width:0}
+  .screen-tbl td[data-label="理由"]::before{display:block;min-width:0;margin-bottom:2px}
   .hide{display:none !important}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
   .modal-bg{position:fixed;inset:0;background:rgba(19,32,31,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto;z-index:50}
@@ -899,19 +917,19 @@ function renderScreenView(){
       const sc=x.screenScore||0;
       const open=x.openIt?'<span style="color:var(--accent);font-weight:700">開く</span>':'<span class="muted">スキップ</span>';
       return `<tr>
-        <td style="text-align:center"><input type="checkbox" class="s-check" data-id="${x.id}"></td>
-        <td>${esc(x.title)}</td>
-        <td style="white-space:nowrap">${esc(x.reward)}</td>
-        <td style="text-align:center">${x.applicants==null?'—':esc(x.applicants)}</td>
-        <td style="white-space:nowrap">${esc(x.deadline)}</td>
-        <td class="num" style="color:${scoreColor(sc)}">${sc}</td>
-        <td style="text-align:center">${open}</td>
-        <td>${esc(x.reason)}</td>
-        <td style="white-space:nowrap">${searchNameBtn(x.title)} ${copyNameBtn(x.title,'📋')}</td>
+        <td class="c-check" style="text-align:center"><input type="checkbox" class="s-check" data-id="${x.id}"></td>
+        <td class="c-title" data-label="案件">${esc(x.title)}</td>
+        <td data-label="報酬" style="white-space:nowrap">${esc(x.reward)}</td>
+        <td data-label="応募者" style="text-align:center">${x.applicants==null?'—':esc(x.applicants)}</td>
+        <td data-label="締切" style="white-space:nowrap">${esc(x.deadline)}</td>
+        <td class="num" data-label="スコア" style="color:${scoreColor(sc)}">${sc}</td>
+        <td data-label="判断" style="text-align:center">${open}</td>
+        <td data-label="理由">${esc(x.reason)}</td>
+        <td class="c-actions" style="white-space:nowrap">${searchNameBtn(x.title)} ${copyNameBtn(x.title,'📋')}</td>
       </tr>`;
     }).join("");
     html += `<div style="font-family:'Zen Maru Gothic',sans-serif;font-weight:700;font-size:15px;margin:18px 0 8px;color:var(--accent)">${esc(g.label)} <span class="muted" style="font-weight:400">（${g.items.length}件）</span></div>`
-      + `<div class="cmp-wrap"><table><thead><tr><th></th><th>案件</th><th>報酬</th><th>応募者</th><th>締切</th><th>スコア</th><th>判断</th><th>理由</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      + `<div class="cmp-wrap"><table class="screen-tbl"><thead><tr><th></th><th>案件</th><th>報酬</th><th>応募者</th><th>締切</th><th>スコア</th><th>判断</th><th>理由</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   });
   $("s-result").innerHTML = html;
 }
